@@ -1,0 +1,64 @@
+#!/bin/bash
+CONCURENCE=$1
+
+USERNAME=study.edge.testing@gmail.com
+PASS='test!@#'
+
+trap "./clean_up; exit" EXIT
+
+time_string="date +%s%N"
+
+function spawn_requests {
+	echo "Spawning Children..."
+
+	start_time=$(($($time_string)/1000000))
+	
+	count=$CONCURENCE
+	while [ $count -gt 0 ]
+	do
+		./spawn.phantom&
+		mkfifo piping/$!
+		count=$(($count-1))
+	done
+	
+	echo "Waiting for children ready"
+	cat piping/* > /dev/null 
+
+	end_time=$(($($time_string)/1000000))
+	
+	heart_beat=$(($end_time-$start_time))
+	heart_beat=$((($($time_string)/1000000)+$heart_beat))
+	
+	echo "Sending heart_beat to children"
+
+	ls piping/* | while read pipe; do echo $heart_beat > $pipe; done
+
+	report_path=$(date +reports/load_report-%m%d%y-%H%M%S)
+	
+	echo '"Time Started", "Load Time", "Number Of Requests", "Number Of Failures"' > $report_path
+	echo "Waiting for children response"
+	cat piping/* >> $report_path
+}
+#spawn_requests
+#exit
+
+echo "Attempting to aquire token"
+
+./aquire_token.phantom "$USERNAME:$PASS"&
+phantom_id=piping/$!
+mkfifo $phantom_id
+
+while true
+do
+	if read status <"$phantom_id"; then
+		if [ "$status" == 'success' ]; then
+			rm -f $phantom_id
+			break
+		else
+			echo "Error aquiring token"
+			exit
+		fi
+	fi
+done
+
+spawn_requests

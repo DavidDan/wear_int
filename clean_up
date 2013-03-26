@@ -1,0 +1,2 @@
+#!/bin/bash
+ls piping | while read proc; do kill $proc &> /dev/null; rm -f piping/$proc; done

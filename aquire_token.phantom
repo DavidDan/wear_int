@@ -1,0 +1,96 @@
+#!phantomjs --config=config.json
+
+var fs = require('fs'), pipe = 'piping/' +require('system').pid;
+var args = require('system').args;
+var login_data = args[1].split(':');
+var email = login_data[0];
+var pass = login_data[1];
+
+while(!fs.exists(pipe)){}
+
+var attempted_login = false;
+
+function check_state(){
+	var loc = page.evaluate(function(){
+		return window.location.href;
+	});
+
+	var logged_in = page.evaluate(function(){
+		if( document.querySelector('#login_form') ){
+			return false;
+		}else{
+			return true;
+		}
+	});
+	
+	if(!logged_in){
+		console.log('Not logged in to facebook... Attempting login');
+
+		page.evaluate(function(){
+			document.querySelector('#email').value = email;
+			document.querySelector('#pass').value = pass;
+			document.querySelector('input[name=persistent]').checked = true;
+			document.querySelector('#login_form').submit();
+		});
+		
+		attempted_login = true;
+		console.log('Sent login form');
+	}else if(attempted_login){
+		attempted_login = false;
+		console.log('Login Success');
+	}
+
+	var perm_request = page.evaluate(function(){
+		if(document.querySelector('input[name=skip_clicked]')){
+			return true;
+		}else{
+			return false;
+		}
+	});
+
+	if(perm_request){
+		console.log('Study Edge requesting wall post permisions... Attempting to reject');
+
+		page.evaluate(function(){
+			document.querySelector('input[name=skip_clicked]').click();
+		});
+
+		console.log('Rejection sent');
+	}
+
+	//console.log(loc);
+	var aquired = false;
+	if(/apps.facebook.com/i.test( loc.split('?')[0] )){
+		aquired = true;
+	}else if(/studyedge.org/i.test( loc.split('?')[0] )){
+		aquired = page.evaluate(function(){
+			return document.body;
+		});
+	}
+
+	if(aquired){
+		console.log('Token aquired');
+		/*console.log(page.evaluate(function(){
+			return document.querySelector('.wall_megs').innerHTML;
+		}));*/
+
+		var output = fs.open(pipe, 'w');
+		output.writeLine('success');
+		output.flush();
+		output.close();
+
+		phantom.exit();
+	}
+}
+
+var page = require('webpage').create();
+page.settings.loadPlugins = false;
+page.onLoadFinished = function(status){
+	if(status==='success'){
+		check_state();
+	}else{
+		console.log('Error loading webpage ' + status);
+		phantom.exit();
+	}	
+}
+page.open('https://staging.studyedge.org');

@@ -1,0 +1,58 @@
+#!phantomjs --config=config.json
+
+var page = require('webpage').create(), start_time;
+
+var fs = require('fs'), system = require('system'), args = system.args, pipe = 'piping/' + system.pid, input, output;
+
+function write_to_output(msg){
+	output = fs.open(pipe, 'w');
+	output.writeLine(msg);
+	output.flush();
+	output.close();
+}
+
+function read_from_input(){
+	var retval;
+
+	input = fs.open(pipe, 'r');
+	retval = input.readLine();
+	input.close();
+	
+	return retval;
+}
+
+while(!fs.exists(pipe)){}
+write_to_output('');
+
+
+page.onLoadFinished = function(status){
+	if(status==='success'){
+		var wall_loaded = page.evaluate(function(){
+			return document.querySelector('.wall_megs') ? 1:0;
+		});
+
+		if(wall_loaded){
+			var load_time = Date.now()-start_time;
+			write_to_output('"' +start_time+ '", "' +load_time+ '"');
+			phantom.exit();
+		}else{
+			write_to_output('"' +start_time+ '", "FAIL IN LOAD"');
+			phantom.exit();	
+		}	
+	}else{
+		write_to_output(system.pid + ' - FAIL: ' +status);
+		phantom.exit();
+	}
+}
+
+function start_test(){
+	start_time = Date.now();
+	page.open('https://staging.studyedge.org');
+}
+
+var heart_beat = parseInt( read_from_input() );
+
+window.setTimeout(function(){
+	start_test();
+	//write_to_output(Date.now());
+}, heart_beat-Date.now() );
